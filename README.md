@@ -44,7 +44,7 @@ make -j2
 ```
 
 依赖使用 FoggyTCP 的 `foggy-tcp-v2` 分支，当前固定在
-`dd30b52d8933b8c64b84991fa7c4755c9371fe53`。普通 submodule update 使用记录的提交，
+`bfdeb87a2efc42677f6a62c9961fbcce4337c8dc`。普通 submodule update 使用记录的提交，
 不会自动切换到其他版本。不要修改 thirdparty 中的依赖代码。
 
 ## 运行起始版
