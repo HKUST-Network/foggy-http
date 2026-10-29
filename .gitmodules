@@ -1,0 +1,4 @@
+[submodule "thirdparty/foggytcp"]
+	path = thirdparty/foggytcp
+	url = https://github.com/HKUST-Network/foggytcp.git
+	branch = foggy-tcp-v2
