@@ -1,154 +1,152 @@
 # Foggy HTTP — ELEC 3120 CP3
 
-在 FoggyTCP 字节流上完成 HTTP/1.x 的消息格式、连接管理和流式响应。
-本仓库提供可运行的 **raw 起始版**：小文本 date/echo 可以收发，但尚未生成合法 HTTP。
+本实验在 FoggyTCP/UDP 上实现 HTTP/1.0、HTTP/1.1、持久连接和 chunked 响应。
+四个应用分别构建，公共 HTTP 库和 FoggyTCP 库保持共享。`data` 应用提供日期服务。
 
-## 目录
+| 程序 | 默认目标或监听端口 | 请求路径 |
+| --- | --- | --- |
+| `data-client` | 服务器 UDP 80 | GET `/checkpoint-3/date` |
+| `data-server` | UDP 8081 | `/checkpoint-3/date` |
+| `echo-client` | 服务器 UDP 80 | POST `/checkpoint-3/echo` |
+| `echo-server` | UDP 8082 | `/checkpoint-3/echo` |
 
-```text
-foggy-http/                  # 仓库根目录
-├── README.md
-├── LICENSE
-├── Makefile
-├── submit.py
-├── thirdparty/
-│   └── foggytcp/             # Git submodule，跟踪 foggy-tcp-v2，提交固定
-└── foggy-http/
-    ├── Makefile
-    ├── inc/
-    │   ├── foggy_http.h      # 固定的 HTTP API
-    │   ├── transport.h      # FoggyTCP 适配接口
-    │   └── transport_log.h
-    ├── src/
-    │   ├── foggy_http.cc    # 学生修改：HTTP 实现
-    │   ├── transport.cc    # 固定的限时读取与 EOF 适配
-    │   ├── client.cc
-    │   └── server.cc
-    ├── conf/
-    │   └── nginx-stream.conf # 学生修改：Nginx UDP 转发
-    └── utils/
-        ├── foggy-tcp.lua
-        └── foggy-http.lua
-```
+## 构建与直接访问
 
-## 获取与编译
-
-依赖：C11 编译器（`cc`/`gcc`/`clang`）、C++17 编译器（`g++`/`clang++`）、Make、Python 3、Git。
-Linux 和 macOS 均可编译基础程序。
-
-HTTP 库和 client/server 使用 **C11** 实现：结构体、显式字节长度、函数指针回调和手动资源释放。
-源文件统一使用 `.cc` 后缀，与 FoggyTCP 对齐；Makefile 用 `$(CC) -x c -std=c11` 编译
-`foggy_http.cc`、`client.cc` 和 `server.cc`，因此这些文件按 C 语法检查。
-FoggyTCP v2 子模块内部仍使用 C++，`transport.cc` 用 C++ 编译并导出 C ABI，最终由 C++
-链接器连接传输依赖。第三方子模块的版本和代码保持不变。
+通过 Git 获取学生初始版时，需要同时初始化固定版本的 FoggyTCP 子模块：
 
 ```sh
 git clone --recurse-submodules https://github.com/HKUST-Network/foggy-http.git
 cd foggy-http
-# 如果克隆时没有初始化依赖：
 git submodule update --init --recursive
+```
+
+解压源码包后进入包含 Makefile、submit.py、foggy-http/ 和 thirdparty/ 的项目根目录：
+
+```sh
 make -j2
+TZ=Asia/Hong_Kong ./build/data-server
 ```
 
-依赖使用 FoggyTCP 的 `foggy-tcp-v2` 分支，当前固定在
-`bfdeb87a2efc42677f6a62c9961fbcce4337c8dc`。普通 submodule update 使用记录的提交，
-不会自动切换到其他版本。不要修改 thirdparty 中的依赖代码。
-
-## 运行起始版
-
-在两个终端分别启动 server 和 client。端口都是 **UDP**：
+在另一个服务端终端启动普通 echo 服务：
 
 ```sh
-# 终端 1
-TZ=Asia/Hong_Kong ./build/foggy-http-server date 19081
-# 终端 2
-TZ=Asia/Hong_Kong ./build/foggy-http-client 127.0.0.1 19081 date --no-keep-alive
+./build/echo-server
 ```
 
-Echo 示例：
+客户端直接访问后端时显式指定端口；用你自己的服务器 IP 替换示例：
 
 ```sh
-# 终端 1
-./build/foggy-http-server echo 19082
-# 终端 2
-./build/foggy-http-client 127.0.0.1 19082 echo 'hello' --no-keep-alive
+./build/data-client 10.0.1.1 --port 8081 --no-keep-alive
+./build/echo-client 10.0.1.1 hello --port 8082 --no-keep-alive
 ```
 
-起始版每次建立新连接，GET 只发送路径，POST 只发送原始 body；服务端只读一次，
-返回 raw body 并关闭。它仅支持小消息，不支持合法 HTTP、完整跨包读取或连接复用。
-起始版的 chunked 选项也会先收齐数据，尚不是真正的流式输出。
+**初始版**只发送 raw 路径或 raw body，返回 raw 数据并关闭连接；上面的直接访问仅是小消息连通性检查。
+它尚未实现 HTTP、完整消息读取、持久连接或 chunked。初始版不能通过按 HTTP 请求行路由的 NGINX。
+**完成版**已经实现这些协议功能及 NGINX 路由，可用作教师测试提交。
 
 ## 学生实现范围
 
-只修改 `foggy-http/src/foggy_http.cc` 和 `foggy-http/conf/nginx-stream.conf`。
-保持 inc 中的公开接口和固定 client/server、传输适配代码不变。
+只修改两个文件：
 
-- 实现 GET/POST、HTTP/1.0 和 HTTP/1.1 请求/响应及方法、路径路由。
-- 使用 CRLF、Host、Connection、Content-Length；正确处理分段输入与二进制 body。
-- HTTP/1.1 复用连接；支持 Connection: close、3 秒空闲关闭和下一次请求重连。
-- 实现 chunked 编码、增量解码和即时回调；server 的流式示例每 100 ms 生成一个 ASCII 字符。
-- 完成 Nginx Stream UDP 转发：18081 → 127.0.0.1:19081，18082 → 127.0.0.1:19082。
+- `foggy-http/src/foggy_http.cc`：HTTP 报文序列化、解析、连接管理、增量 chunked 解码和输出。
+- `foggy-http/conf/nginx-stream.conf`：补全 Lua 中两个路径到后端地址的映射。
 
-Nginx 模板作为片段包含在 nginx.conf 的 `stream {}` 中，需要安装并启用 Stream 模块。
-HTTP 客户端程序通过 FoggyTCP 访问 UDP 入口；本仓库只提供 client/server，不提供浏览器字节桥。
+公开 C API、四个应用、FoggyTCP 及 NGINX 支持代码固定。
+源码使用 `.cc` 扩展名，但 HTTP 库和应用由 `-std=c11 -x c` 编译；FoggyTCP 内部仍使用 C++。
 
-FoggyTCP v2 的正数读取结果表示数据，缓冲读完后的 0 表示对端 EOF；HTTP 适配层的 -2
-表示读取超时。EOF 与超时不同，是否关闭本端句柄由应用决定。`foggy_close` 释放整个本地
-句柄；依赖不提供 shutdown-write 半关闭接口。每个服务端实例一次处理一条会话。
+HTTP 实现需满足：
 
-## C 接口与资源管理
+1. GET 日期、POST echo；请求包含 Host 和 Connection，POST 包含 Content-Length（空 body 也包含）。
+2. 按 method/path 路由；普通响应包含状态行和 Content-Length；二进制 body 按字节计数。
+3. 缓冲跨读取的请求/响应，保留多读的字节。每行至多 8 KiB，完整 header 至多 16 KiB，body 至多 1 MiB。
+4. HTTP/1.1 默认保持连接，遵守 Connection: close；HTTP/1.0 默认关闭。
+5. 同一个 Client 连续请求复用连接；服务端响应完成后空闲 3 秒关闭。客户端间隔 10 秒再次 GET 时重建连接。
+6. 未完成消息的读取期限为 5 秒；chunked 客户端可为每个 chunk 重新计时。
+7. 用 Content-Length 或 chunked 终止块判断消息完整，持久连接不能依靠 EOF 判断每次响应结束。
 
-公开接口在 `foggy-http/inc/foggy_http.h`，使用 `foggy_http_client_t`、
-`foggy_http_server_t`、`foggy_http_request_t` 和 `foggy_http_response_t` 结构体。
-函数失败返回 `-1` 并设置 `errno`；`client_get`/`client_post` 的响应通过输出参数返回。
+## echo-server 的 chunked 选项
 
-- 用 `foggy_http_client_init`/`foggy_http_client_free` 管理客户端；`client_close` 只关闭当前连接，仍可发起下一次请求。
-- 每次请求前调用 `foggy_http_response_init`，完成或失败后调用 `foggy_http_response_free`。
-- body 使用 `data` 和 `size`，可包含 NUL 字节；缓冲区和 header 链表由对应的 free 函数释放。
-- handler 通过 `void *context` 获取应用状态；request 的起始行和 body 只在 handler 调用期间有效。
-- `next(context, output)` 返回 `1` 表示还有输出，`0` 表示最后一段，`-1` 表示错误。
-  返回 `0` 时仍可能产生非空的最后一段，必须先发送该段。`free_context` 在 response 释放时清理生产者状态。
-- receiver 接收 `(data, size, context)`；数据只在回调期间有效，需要保留时应复制。
-- server 的路由 context 由应用拥有；`foggy_http_server_free` 释放路由和路径，不释放该 context。
+停止普通 echo-server，再启动：
 
-固定应用中的 date/echo handler 展示了这些接口。HTTP 协议部分仍保留作业 TODO，
-本次语言迁移保留 raw 起始版的功能范围。
+```sh
+./build/echo-server --chunked
+```
 
-## 打包与 SHA-256
+服务端每 100 ms 生成一个字节，及时按 `<hex-size>\r\n<data>\r\n` 发送，最终发送 `0\r\n\r\n`。
+响应使用 `Transfer-Encoding: chunked`，不带 Content-Length。没有 `--chunked` 时使用普通 Content-Length 响应。
+HTTP/1.0 的流式响应可通过关闭连接结束，不发送 HTTP/1.1 chunked 编码。
 
-在仓库根目录执行：
+echo-client 根据响应头自动解码并立即输出，**没有客户端 `--chunked` 选项，也不发送 TE: chunked**：
+
+```sh
+./build/echo-client 10.0.1.1 0123456789abcdefghij --port 8082
+```
+
+stdout 只有解码后的 body；stderr 的 `CHUNK <毫秒> <字节数>` 用于分析增量到达。
+`RESPONSE <状态码> local_port=<端口>` 用于观察连接复用和重连。
+
+## NGINX Stream + Lua
+
+路径是 `/checkpoint-3/date`、`/checkpoint-3/echo`；`checkpoint-3` 是路径前缀。
+入口是 **UDP 80**。本实验不使用普通 TCP HTTP 入口，不需要 curl 或 TCP/FoggyTCP bridge。
+
+```text
+data-client / echo-client
+    -> FoggyTCP / UDP :80
+    -> NGINX Stream + Lua 按 HTTP 请求路径选择后端
+    -> data-server UDP :8081 / echo-server UDP :8082
+```
+
+在 Linux 服务端安装课程固定版 NGINX/OpenResty（首次编译需几分钟）：
+
+```sh
+sudo bash lab/setup.sh
+```
+
+源码包包含 OpenResty 1.27.1.2 源码及 SHA-256 校验；安装到 `/opt/foggy-nginx`，不替换系统 NGINX。
+内部 C 模块只把首个数据报暴露为只读 `$foggy_packet`，不消费或修改数据；Lua 校验 FoggyTCP 头部并读取 HTTP 请求行，
+将路径映射结果写入 `$foggy_backend`，再由 NGINX proxy_pass 双向转发。Lua 代码位于
+`foggy-http/support/nginx/lua/foggy_router.lua`。这与 utils/ 中的 Wireshark Lua 插件运行环境不同。
+安装脚本为课程 NGINX 配置绑定低端口的能力；应用程序无需 root。
+
+实验明确采用以下范围：
+
+- 首个 FoggyTCP 数据报包含完整 HTTP 请求行（包括 CRLF）；将完整请求行/headers 一次写入传输层即可满足两个固定路径。
+- headers 剩余部分及 body 仍可能跨报文、跨读取。
+- 每条 FoggyTCP/NGINX UDP 会话固定一个后端；不在同一会话中切换 date/echo。
+- UDP 代理超时设为 30 秒，高于 HTTP 的 3 秒空闲超时；保留默认无限制响应数据报数量，确保 ACK、FIN 和多块数据能通过。
+
+保持两个后端运行，在服务端另开终端：
+
+```sh
+python3 lab/nginx.py --root "$PWD/runtime/nginx" --student-config "$PWD/foggy-http/conf/nginx-stream.conf"
+/opt/foggy-nginx/nginx/sbin/nginx -e stderr -t -p "$PWD/runtime/nginx/" -c "$PWD/runtime/nginx/nginx.conf"
+/opt/foggy-nginx/nginx/sbin/nginx -e stderr -p "$PWD/runtime/nginx/" -c "$PWD/runtime/nginx/nginx.conf" -g 'daemon off;'
+```
+
+客户端通过默认 UDP 80 入口访问：
+
+```sh
+./build/data-client 10.0.1.1
+./build/echo-client 10.0.1.1 0123456789abcdefghij
+./build/data-client 10.0.1.1 --repeat 3
+./build/data-client 10.0.1.1 --repeat 2 --interval 10
+```
+
+## 打包提交
 
 ```sh
 make -j2
 python3 submit.py
 python3 submit.py --verify submit.zip
-unzip -l submit.zip
 ```
 
-生成的扁平 ZIP 恰好有三个文件：
-
-```text
-foggy_http.cc
-nginx-stream.conf
-SHA256SUMS
-```
-
-构建会编译源码快照，并把源码及 Nginx 配置的 SHA-256 记录到 `build/SHA256SUMS`。
-submit.py 比较当前文件、构建快照和该记录；不一致时拒绝打包。修改后请重新构建并检查。
-`--verify` 同时检查 ZIP 的文件清单、内容哈希及其与当前构建的一致性。
-脚本还会打印整个 ZIP 的 SHA-256，便于记录上传的文件。哈希用于检查一致性，不是功能正确性证明。
+扁平 ZIP 恰好包含 `foggy_http.cc`、`nginx-stream.conf`、`SHA256SUMS`。
+修改源码或配置后必须重新构建；打包程序拒绝与构建记录不一致的文件。
+不要提交四个固定应用、NGINX 支持代码或第三方库。
 
 ## Wireshark
 
-先加载传输插件，再加载 HTTP 插件；将路径替换为本机 Wireshark 的可执行文件：
-
-```sh
-wireshark \
-  -X lua_script:foggy-http/utils/foggy-tcp.lua \
-  -X lua_script:foggy-http/utils/foggy-http.lua \
-  -r capture.pcap
-```
-
-过滤器：`foggytcp` 查看传输字段，`foggyhttp` 查看 HTTP 重组。
-抓包应包含会话起点；插件用于短实验捕获，不处理序号回绕或同四元组复用的新会话。
-EOF/FIN 属于传输关闭；HTTP 消息应由 Content-Length 或 chunked 终止块界定。
+先加载 `foggy-http/utils/foggy-tcp.lua`，再加载 `foggy-http/utils/foggy-http.lua`。
+抓包过滤器使用 `udp port 80 or udp port 8081 or udp port 8082`，服务端本机转发流量在 `lo` 或 `any` 上抓取。
+这两个 Lua 是被动的 Wireshark 解码插件，不参与 NGINX 转发。

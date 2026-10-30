@@ -88,6 +88,6 @@ function foggy.dissector(tvb, pinfo, tree)
     end
     return tvb:len()
 end
-for _, port in ipairs({18081, 18082, 19081, 19082}) do
+for _, port in ipairs({80, 8081, 8082, 8089}) do
     DissectorTable.get("udp.port"):add(port, foggy)
 end

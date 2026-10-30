@@ -48,7 +48,7 @@ def main():
         build = ROOT/'build'
         current = {name: (ROOT/path).read_bytes() for name, path in FILES.items()}
         snapshots = {name: (build/name).read_bytes() for name in FILES}
-        for name in ('http.o', 'foggy-http-client', 'foggy-http-server'):
+        for name in ('http.o', 'data-client', 'data-server', 'echo-client', 'echo-server'):
             if not (build/name).is_file():
                 raise ValueError(f'Missing build output: {name}')
         if args.record_build:

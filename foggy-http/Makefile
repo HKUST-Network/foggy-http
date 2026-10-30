@@ -6,9 +6,8 @@ CPPFLAGS = -Iinc -I../thirdparty/foggytcp/foggytcp/inc
 BUILD = ../build
 UPSTREAM = ../thirdparty/foggytcp/foggytcp
 TRANSPORT = $(addprefix $(BUILD)/,foggy_tcp.o foggy_backend.o foggy_function.o foggy_packet.o transport.o)
-CLIENT = $(BUILD)/foggy-http-client
-SERVER = $(BUILD)/foggy-http-server
-all: $(CLIENT) $(SERVER) $(BUILD)/SHA256SUMS
+PROGRAMS = data-client data-server echo-client echo-server
+all: $(addprefix $(BUILD)/,$(PROGRAMS)) $(BUILD)/SHA256SUMS
 $(BUILD)/foggy_%.o: $(UPSTREAM)/src/foggy_%.cc $(wildcard $(UPSTREAM)/inc/*.h) inc/transport_log.h
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -include inc/transport_log.h -c $< -o $@
@@ -21,17 +20,12 @@ $(BUILD)/http.o: src/foggy_http.cc inc/foggy_http.h inc/transport.h
 	@mkdir -p $(@D)
 	cp src/foggy_http.cc $(BUILD)/foggy_http.cc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -x c -c $(BUILD)/foggy_http.cc -o $@
-$(BUILD)/client.o: src/client.cc inc/foggy_http.h inc/transport.h
+$(BUILD)/apps/%.o: src/%.cc src/client_common.h src/server_common.h inc/foggy_http.h inc/transport.h
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -x c -c $< -o $@
-$(BUILD)/server.o: src/server.cc inc/foggy_http.h inc/transport.h
-	@mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -x c -c $< -o $@
-$(CLIENT): $(BUILD)/client.o $(BUILD)/http.o $(TRANSPORT)
+$(addprefix $(BUILD)/,$(PROGRAMS)): $(BUILD)/%: $(BUILD)/apps/%.o $(BUILD)/http.o $(TRANSPORT)
 	$(CXX) $(CXXFLAGS) $^ -o $@
-$(SERVER): $(BUILD)/server.o $(BUILD)/http.o $(TRANSPORT)
-	$(CXX) $(CXXFLAGS) $^ -o $@
-$(BUILD)/SHA256SUMS: $(CLIENT) $(SERVER) conf/nginx-stream.conf ../submit.py
+$(BUILD)/SHA256SUMS: $(addprefix $(BUILD)/,$(PROGRAMS)) conf/nginx-stream.conf ../submit.py
 	cp conf/nginx-stream.conf $(BUILD)/nginx-stream.conf
 	python3 ../submit.py --record-build
 clean:
