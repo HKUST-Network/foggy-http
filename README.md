@@ -1,18 +1,11 @@
 # Foggy HTTP — ELEC 3120 CP3
 
-本实验在 FoggyTCP/UDP 上实现 HTTP/1.0、HTTP/1.1、持久连接和 chunked 响应。
-四个应用分别构建，公共 HTTP 库和 FoggyTCP 库保持共享。`data` 应用提供日期服务。
+Implement HTTP/1.0 and HTTP/1.1 over the supplied FoggyTCP v2 byte stream, then
+configure ordinary NGINX Stream to route both applications through **UDP 80**.
+A fixed C dynamic module extracts the HTTP path. Students use standard NGINX
+`map` and `proxy_pass` directives; the module source is provided unchanged.
 
-| 程序 | 默认目标或监听端口 | 请求路径 |
-| --- | --- | --- |
-| `data-client` | 服务器 UDP 80 | GET `/checkpoint-3/date` |
-| `data-server` | UDP 8081 | `/checkpoint-3/date` |
-| `echo-client` | 服务器 UDP 80 | POST `/checkpoint-3/echo` |
-| `echo-server` | UDP 8082 | `/checkpoint-3/echo` |
-
-## 构建与直接访问
-
-通过 Git 获取学生初始版时，需要同时初始化固定版本的 FoggyTCP 子模块：
+## Get the starter
 
 ```sh
 git clone --recurse-submodules https://github.com/HKUST-Network/foggy-http.git
@@ -20,111 +13,161 @@ cd foggy-http
 git submodule update --init --recursive
 ```
 
-解压源码包后进入包含 Makefile、submit.py、foggy-http/ 和 thirdparty/ 的项目根目录：
+Use the recorded **FoggyTCP v2** submodule, not your CP2 implementation. Source
+ZIPs include the dependency. The project root contains Makefile, submit.py,
+foggy-http/, thirdparty/, and lab/.
+
+The four applications and HTTP library are C11 code with `.cc` filenames,
+compiled using `-std=c11 -x c`. FoggyTCP and its C ABI adapter use C++17. Build
+with GCC/Clang, a C++17 compiler, Make, and Python 3.9+:
 
 ```sh
 make -j2
-TZ=Asia/Hong_Kong ./build/data-server
 ```
 
-在另一个服务端终端启动普通 echo 服务：
+## Applications and direct access
+
+| Executable | Operation | Default port | Request path |
+| --- | --- | ---: | --- |
+| `data-client` | GET the current date | Destination UDP 80 | `/checkpoint-3/date` |
+| `data-server` | Return `YYYY-MM-DD\n` | Listen on UDP 8081 | `/checkpoint-3/date` |
+| `echo-client` | POST text and print the returned body | Destination UDP 80 | `/checkpoint-3/echo` |
+| `echo-server` | Return the exact request body | Listen on UDP 8082 | `/checkpoint-3/echo` |
+
+Run the two servers in separate server terminals:
 
 ```sh
+TZ=Asia/Hong_Kong ./build/data-server
 ./build/echo-server
 ```
 
-客户端直接访问后端时显式指定端口；用你自己的服务器 IP 替换示例：
+Run direct backend checks from the client VM (replace the example server IP):
 
 ```sh
 ./build/data-client 10.0.1.1 --port 8081 --no-keep-alive
 ./build/echo-client 10.0.1.1 hello --port 8082 --no-keep-alive
 ```
 
-**初始版**只发送 raw 路径或 raw body，返回 raw 数据并关闭连接；上面的直接访问仅是小消息连通性检查。
-它尚未实现 HTTP、完整消息读取、持久连接或 chunked。初始版不能通过按 HTTP 请求行路由的 NGINX。
-**完成版**已经实现这些协议功能及 NGINX 路由，可用作教师测试提交。
+This repository is an **unfinished raw starter**. Initially GET sends only a
+raw path, POST sends only raw body bytes, and the server returns raw data before
+closing. These small direct exchanges check connectivity. Implement HTTP before
+attempting the path-based NGINX tests.
 
-## 学生实现范围
+## Student work
 
-只修改两个文件：
+Modify exactly two files:
 
-- `foggy-http/src/foggy_http.cc`：HTTP 报文序列化、解析、连接管理、增量 chunked 解码和输出。
-- `foggy-http/conf/nginx-stream.conf`：补全 Lua 中两个路径到后端地址的映射。
+- `foggy-http/src/foggy_http.cc`: HTTP serialization/parsing, message framing,
+  connection management, chunked encoding, and incremental decoding.
+- `foggy-http/conf/nginx-stream.conf`: standard NGINX path-to-backend rules in
+  the `map` block.
 
-公开 C API、四个应用、FoggyTCP 及 NGINX 支持代码固定。
-源码使用 `.cc` 扩展名，但 HTTP 库和应用由 `-std=c11 -x c` 编译；FoggyTCP 内部仍使用 C++。
+Keep the public C API, four applications, transport, NGINX module, and build
+files unchanged. The API is in `foggy-http/inc/foggy_http.h`.
 
-HTTP 实现需满足：
+Required HTTP behavior:
 
-1. GET 日期、POST echo；请求包含 Host 和 Connection，POST 包含 Content-Length（空 body 也包含）。
-2. 按 method/path 路由；普通响应包含状态行和 Content-Length；二进制 body 按字节计数。
-3. 缓冲跨读取的请求/响应，保留多读的字节。每行至多 8 KiB，完整 header 至多 16 KiB，body 至多 1 MiB。
-4. HTTP/1.1 默认保持连接，遵守 Connection: close；HTTP/1.0 默认关闭。
-5. 同一个 Client 连续请求复用连接；服务端响应完成后空闲 3 秒关闭。客户端间隔 10 秒再次 GET 时重建连接。
-6. 未完成消息的读取期限为 5 秒；chunked 客户端可为每个 chunk 重新计时。
-7. 用 Content-Length 或 chunked 终止块判断消息完整，持久连接不能依靠 EOF 判断每次响应结束。
+1. GET `/checkpoint-3/date` and POST `/checkpoint-3/echo`; include Host and
+   Connection, and Content-Length for POST, including an empty body.
+2. Parse complete requests before invoking the method/path handler. Preserve
+   exact body bytes, including NUL and UTF-8; lengths count bytes.
+3. Buffer split messages and retain bytes read beyond the current message.
+   Bound each start/header line to 8 KiB, the whole header section to 16 KiB,
+   and ordinary or cumulative chunked payloads to 1 MiB. Reject invalid framing.
+4. Reuse HTTP/1.1 connections and honor Connection: close. HTTP/1.0 closes by
+   default. Determine response completion from framing instead of waiting for EOF.
+5. Close server connections after 3 seconds of idle time following a response.
+   A client waiting 10 seconds between GETs must establish a new usable connection.
+6. Enforce a 5-second incomplete-message read deadline; streaming clients may
+   restart the deadline per chunk.
 
-## echo-server 的 chunked 选项
+## Chunked echo
 
-停止普通 echo-server，再启动：
+Stop the ordinary echo server and restart it with the server-side option:
 
 ```sh
 ./build/echo-server --chunked
 ```
 
-服务端每 100 ms 生成一个字节，及时按 `<hex-size>\r\n<data>\r\n` 发送，最终发送 `0\r\n\r\n`。
-响应使用 `Transfer-Encoding: chunked`，不带 Content-Length。没有 `--chunked` 时使用普通 Content-Length 响应。
-HTTP/1.0 的流式响应可通过关闭连接结束，不发送 HTTP/1.1 chunked 编码。
+The fixed producer generates one payload byte every 100 ms. Send HTTP/1.1
+`Transfer-Encoding: chunked`, omit Content-Length, encode each piece promptly,
+and terminate with `0\r\n\r\n`. A producer return value of 0 may still include
+its last nonempty piece; send it before the terminator.
 
-echo-client 根据响应头自动解码并立即输出，**没有客户端 `--chunked` 选项，也不发送 TE: chunked**：
+The echo client automatically selects decoding from response headers and
+immediately prints received payloads. It has no client-side chunked option:
 
 ```sh
 ./build/echo-client 10.0.1.1 0123456789abcdefghij --port 8082
 ```
 
-stdout 只有解码后的 body；stderr 的 `CHUNK <毫秒> <字节数>` 用于分析增量到达。
-`RESPONSE <状态码> local_port=<端口>` 用于观察连接复用和重连。
+stdout contains only decoded body bytes. stderr reports `CHUNK <ms> <bytes>` and
+`RESPONSE <status> local_port=<port>` for timing and connection analysis.
 
-## NGINX Stream + Lua
+## Ordinary NGINX Stream + fixed C module
 
-路径是 `/checkpoint-3/date`、`/checkpoint-3/echo`；`checkpoint-3` 是路径前缀。
-入口是 **UDP 80**。本实验不使用普通 TCP HTTP 入口，不需要 curl 或 TCP/FoggyTCP bridge。
+The proxy path is:
 
 ```text
-data-client / echo-client
-    -> FoggyTCP / UDP :80
-    -> NGINX Stream + Lua 按 HTTP 请求路径选择后端
-    -> data-server UDP :8081 / echo-server UDP :8082
+client -> FoggyTCP/UDP :80 -> ordinary NGINX Stream
+                             /checkpoint-3/date -> UDP :8081
+                             /checkpoint-3/echo -> UDP :8082
 ```
 
-在 Linux 服务端安装课程固定版 NGINX/OpenResty（首次编译需几分钟）：
+`checkpoint-3` is part of the HTTP path. The proxy listens on UDP 80. The C module
+inspects the initial packet without consuming or modifying it and provides the
+read-only `$foggy_http_path` variable. Your standard `map` sets `$backend`, and
+`proxy_pass $backend` forwards the session. Actual forwarding remains at the UDP
+transport layer; the HTTP path is used only to choose the backend.
+
+On the Debian/Ubuntu **server VM**, install the environment once from the
+project root:
 
 ```sh
 sudo bash lab/setup.sh
 ```
 
-源码包包含 OpenResty 1.27.1.2 源码及 SHA-256 校验；安装到 `/opt/foggy-nginx`，不替换系统 NGINX。
-内部 C 模块只把首个数据报暴露为只读 `$foggy_packet`，不消费或修改数据；Lua 校验 FoggyTCP 头部并读取 HTTP 请求行，
-将路径映射结果写入 `$foggy_backend`，再由 NGINX proxy_pass 双向转发。Lua 代码位于
-`foggy-http/support/nginx/lua/foggy_router.lua`。这与 utils/ 中的 Wireshark Lua 插件运行环境不同。
-安装脚本为课程 NGINX 配置绑定低端口的能力；应用程序无需 root。
+The script installs ordinary NGINX, its Stream module, and the C/C++ build tools.
+Where available, it uses matching nginx-dev headers. Ubuntu 22.04 has no
+nginx-dev package, so the project bundles verified NGINX 1.18.0 source headers
+for that runtime; setup installs the corresponding build dependencies and checks
+the archive's SHA-256. In either case it builds only the supplied dynamic module
+and installs it at:
 
-实验明确采用以下范围：
-
-- 首个 FoggyTCP 数据报包含完整 HTTP 请求行（包括 CRLF）；将完整请求行/headers 一次写入传输层即可满足两个固定路径。
-- headers 剩余部分及 body 仍可能跨报文、跨读取。
-- 每条 FoggyTCP/NGINX UDP 会话固定一个后端；不在同一会话中切换 date/echo。
-- UDP 代理超时设为 30 秒，高于 HTTP 的 3 秒空闲超时；保留默认无限制响应数据报数量，确保 ACK、FIN 和多块数据能通过。
-
-保持两个后端运行，在服务端另开终端：
-
-```sh
-python3 lab/nginx.py --root "$PWD/runtime/nginx" --student-config "$PWD/foggy-http/conf/nginx-stream.conf"
-/opt/foggy-nginx/nginx/sbin/nginx -e stderr -t -p "$PWD/runtime/nginx/" -c "$PWD/runtime/nginx/nginx.conf"
-/opt/foggy-nginx/nginx/sbin/nginx -e stderr -p "$PWD/runtime/nginx/" -c "$PWD/runtime/nginx/nginx.conf" -g 'daemon off;'
+```text
+/usr/lib/nginx/modules/ngx_stream_foggy_http_module.so
 ```
 
-客户端通过默认 UDP 80 入口访问：
+The NGINX executable is not rebuilt or replaced. Module loading is checked with
+`nginx -t`. Setup records the NGINX/package version, architecture, and source
+identity; rerun it after upgrading NGINX or changing the fixed support code.
+Students do not write the C module. Instructors may provision a matching module
+in the VM in advance. A compiled module must match the NGINX runtime and CPU
+architecture, so binaries are not included in source ZIPs.
+
+Complete the `map` rules in `foggy-http/conf/nginx-stream.conf`. Use case-sensitive regular expression keys to distinguish the two exact HTTP
+paths; see the [standard map reference](https://nginx.org/en/docs/stream/ngx_stream_map_module.html). Keep the
+proxy timeout at 30 seconds, above the HTTP idle timeout, and leave the number
+of expected UDP response datagrams unlimited for ACKs, FINs, and streamed data.
+
+Keep both backend servers running. In another server terminal:
+
+```sh
+python3 lab/nginx.py --root "$PWD/runtime/nginx" \
+    --student-config "$PWD/foggy-http/conf/nginx-stream.conf"
+sudo /usr/sbin/nginx -t \
+    -p "$PWD/runtime/nginx/" -c "$PWD/runtime/nginx/nginx.conf"
+sudo /usr/sbin/nginx \
+    -p "$PWD/runtime/nginx/" -c "$PWD/runtime/nginx/nginx.conf" -g 'daemon off;'
+```
+
+The generator loads the standard Stream module and the fixed C module in an
+isolated configuration. Logs and the PID stay under runtime/nginx/. Existing
+system configuration does not need editing. Root is used here to bind UDP 80;
+the two backend applications run as an ordinary user. Stop the foreground proxy
+with Ctrl+C before starting another instance on UDP 80.
+
+Clients use port 80 by default:
 
 ```sh
 ./build/data-client 10.0.1.1
@@ -133,7 +176,15 @@ python3 lab/nginx.py --root "$PWD/runtime/nginx" --student-config "$PWD/foggy-ht
 ./build/data-client 10.0.1.1 --repeat 2 --interval 10
 ```
 
-## 打包提交
+Lab routing scope:
+
+- The initial sequence-zero FoggyTCP datagram contains the entire HTTP request
+  line, including CRLF. Write the complete line/header section in one operation.
+- Remaining headers and bodies may span datagrams and reads.
+- Each UDP session stays with the backend selected by its first request.
+  Date and echo use separate connections.
+
+## Build and submit
 
 ```sh
 make -j2
@@ -141,12 +192,22 @@ python3 submit.py
 python3 submit.py --verify submit.zip
 ```
 
-扁平 ZIP 恰好包含 `foggy_http.cc`、`nginx-stream.conf`、`SHA256SUMS`。
-修改源码或配置后必须重新构建；打包程序拒绝与构建记录不一致的文件。
-不要提交四个固定应用、NGINX 支持代码或第三方库。
+Upload the generated flat `submit.zip`, containing exactly:
+
+```text
+foggy_http.cc
+nginx-stream.conf
+SHA256SUMS
+```
+
+SHA256SUMS is generated automatically. The submitter checks current files against
+the recorded build; rebuild after editing either file. The fixed applications,
+transport, module sources and binaries are provided by the grader.
 
 ## Wireshark
 
-先加载 `foggy-http/utils/foggy-tcp.lua`，再加载 `foggy-http/utils/foggy-http.lua`。
-抓包过滤器使用 `udp port 80 or udp port 8081 or udp port 8082`，服务端本机转发流量在 `lo` 或 `any` 上抓取。
-这两个 Lua 是被动的 Wireshark 解码插件，不参与 NGINX 转发。
+Load `foggy-http/utils/foggy-tcp.lua` before
+`foggy-http/utils/foggy-http.lua`. These are passive Wireshark dissectors. Capture
+`udp port 80 or udp port 8081 or udp port 8082`; use the server's `lo` or `any`
+interface to include local proxy-to-backend traffic. Start with a fresh capture
+that includes the session beginning.
