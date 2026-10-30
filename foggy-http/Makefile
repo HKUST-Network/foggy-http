@@ -7,7 +7,9 @@ BUILD = ../build
 UPSTREAM = ../thirdparty/foggytcp/foggytcp
 TRANSPORT = $(addprefix $(BUILD)/,foggy_tcp.o foggy_backend.o foggy_function.o foggy_packet.o transport.o)
 PROGRAMS = date-client date-server echo-client echo-server
-all: $(addprefix $(BUILD)/,$(PROGRAMS)) $(BUILD)/SHA256SUMS
+all: $(addprefix $(BUILD)/,$(PROGRAMS)) $(BUILD)/SHA256SUMS nginx-module
+nginx-module:
+	+bash support/nginx/install.sh "$(abspath $(BUILD))/ngx_stream_foggy_http_module.so"
 $(BUILD)/foggy_%.o: $(UPSTREAM)/src/foggy_%.cc $(wildcard $(UPSTREAM)/inc/*.h) inc/transport_log.h
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -include inc/transport_log.h -c $< -o $@
@@ -30,4 +32,4 @@ $(BUILD)/SHA256SUMS: $(addprefix $(BUILD)/,$(PROGRAMS)) conf/nginx-stream.conf .
 	python3 ../submit.py --record-build
 clean:
 	rm -rf $(BUILD)
-.PHONY: all clean
+.PHONY: all clean nginx-module

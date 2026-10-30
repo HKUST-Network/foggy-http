@@ -9,5 +9,4 @@ else
     # Ubuntu 22.04 has no nginx-dev; use the bundled matching source headers.
     apt-get -o Acquire::Retries=3 install -y libpcre3-dev zlib1g-dev libssl-dev
 fi
-project_root=$(cd "$(dirname "$0")/.." && pwd)
-bash "$project_root/foggy-http/support/nginx/install.sh"
+printf '%s\n' 'Dependencies installed. Run make as your ordinary user to build the applications and course NGINX module.'
