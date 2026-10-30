@@ -1,0 +1,6 @@
+# These .cc files are compiled as C11; retain C highlighting on GitHub.
+foggy-http/src/foggy_http.cc linguist-language=C
+foggy-http/src/client.cc linguist-language=C
+foggy-http/src/server.cc linguist-language=C
+foggy-http/inc/foggy_http.h linguist-language=C
+foggy-http/inc/transport.h linguist-language=C
