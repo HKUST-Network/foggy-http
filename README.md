@@ -34,10 +34,11 @@ make -j2
 | `echo-client` | POST text and print the returned body | Destination UDP 80 | `/checkpoint-3/echo` |
 | `echo-server` | Return the exact request body | Listen on UDP 8082 | `/checkpoint-3/echo` |
 
-Run the two servers in separate server terminals:
+Run the two servers in separate server terminals. `data-server` sets its process
+timezone to `Asia/Hong_Kong` automatically, regardless of the inherited timezone:
 
 ```sh
-TZ=Asia/Hong_Kong ./build/data-server
+./build/data-server
 ./build/echo-server
 ```
 

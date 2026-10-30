@@ -19,6 +19,11 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: data-server [--port PORT]\n");
         return 1;
     }
+    if (setenv("TZ", "Asia/Hong_Kong", 1) < 0) {
+        perror("ERROR timezone");
+        return 1;
+    }
+    tzset();
     foggy_http_server_t server;
     foggy_http_server_init(&server);
     int result = foggy_http_server_get(&server, "/checkpoint-3/date", date_handler, NULL);
