@@ -7,7 +7,7 @@ import re
 import zipfile
 
 ROOT = Path(__file__).resolve().parent
-FILES = {'foggy_http.cpp': 'foggy-http/src/foggy_http.cpp',
+FILES = {'foggy_http.cc': 'foggy-http/src/foggy_http.cc',
          'nginx-stream.conf': 'foggy-http/conf/nginx-stream.conf'}
 
 
@@ -22,7 +22,7 @@ def manifest(payloads):
 def parse_manifest(data):
     sums = {}
     for line in data.decode('ascii').splitlines():
-        match = re.fullmatch(r'([0-9a-f]{64})  (foggy_http\.cpp|nginx-stream\.conf)', line)
+        match = re.fullmatch(r'([0-9a-f]{64})  (foggy_http\.cc|nginx-stream\.conf)', line)
         if not match or match[2] in sums:
             raise ValueError('Invalid SHA256SUMS')
         sums[match[2]] = match[1]
