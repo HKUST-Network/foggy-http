@@ -3,7 +3,7 @@
 int main(int argc, char **argv) {
     client_options_t o;
     if (client_options(argc, argv, 0, &o) < 0) {
-        fprintf(stderr, "usage: data-client HOST [--port PORT] [--no-keep-alive] [--repeat N] [--interval S]\n");
+        fprintf(stderr, "usage: date-client HOST [--port PORT] [--no-keep-alive] [--repeat N] [--interval S]\n");
         return 1;
     }
     foggy_http_client_t client;

@@ -29,23 +29,23 @@ make -j2
 
 | Executable | Operation | Default port | Request path |
 | --- | --- | ---: | --- |
-| `data-client` | GET the current date | Destination UDP 80 | `/checkpoint-3/date` |
-| `data-server` | Return `YYYY-MM-DD\n` | Listen on UDP 8081 | `/checkpoint-3/date` |
+| `date-client` | GET the current date | Destination UDP 80 | `/checkpoint-3/date` |
+| `date-server` | Return `YYYY-MM-DD\n` | Listen on UDP 8081 | `/checkpoint-3/date` |
 | `echo-client` | POST text and print the returned body | Destination UDP 80 | `/checkpoint-3/echo` |
 | `echo-server` | Return the exact request body | Listen on UDP 8082 | `/checkpoint-3/echo` |
 
-Run the two servers in separate server terminals. `data-server` sets its process
+Run the two servers in separate server terminals. `date-server` sets its process
 timezone to `Asia/Hong_Kong` automatically, regardless of the inherited timezone:
 
 ```sh
-./build/data-server
+./build/date-server
 ./build/echo-server
 ```
 
 Run direct backend checks from the client VM (replace the example server IP):
 
 ```sh
-./build/data-client 10.0.1.1 --port 8081 --no-keep-alive
+./build/date-client 10.0.1.1 --port 8081 --no-keep-alive
 ./build/echo-client 10.0.1.1 hello --port 8082 --no-keep-alive
 ```
 
@@ -171,10 +171,10 @@ with Ctrl+C before starting another instance on UDP 80.
 Clients use port 80 by default:
 
 ```sh
-./build/data-client 10.0.1.1
+./build/date-client 10.0.1.1
 ./build/echo-client 10.0.1.1 0123456789abcdefghij
-./build/data-client 10.0.1.1 --repeat 3
-./build/data-client 10.0.1.1 --repeat 2 --interval 10
+./build/date-client 10.0.1.1 --repeat 3
+./build/date-client 10.0.1.1 --repeat 2 --interval 10
 ```
 
 Lab routing scope:

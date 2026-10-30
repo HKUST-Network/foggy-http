@@ -16,7 +16,7 @@ static int date_handler(const foggy_http_request_t *request,
 int main(int argc, char **argv) {
     int port;
     if (server_options(argc, argv, 8081, &port, NULL) < 0) {
-        fprintf(stderr, "usage: data-server [--port PORT]\n");
+        fprintf(stderr, "usage: date-server [--port PORT]\n");
         return 1;
     }
     if (setenv("TZ", "Asia/Hong_Kong", 1) < 0) {

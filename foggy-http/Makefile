@@ -6,7 +6,7 @@ CPPFLAGS = -Iinc -I../thirdparty/foggytcp/foggytcp/inc
 BUILD = ../build
 UPSTREAM = ../thirdparty/foggytcp/foggytcp
 TRANSPORT = $(addprefix $(BUILD)/,foggy_tcp.o foggy_backend.o foggy_function.o foggy_packet.o transport.o)
-PROGRAMS = data-client data-server echo-client echo-server
+PROGRAMS = date-client date-server echo-client echo-server
 all: $(addprefix $(BUILD)/,$(PROGRAMS)) $(BUILD)/SHA256SUMS
 $(BUILD)/foggy_%.o: $(UPSTREAM)/src/foggy_%.cc $(wildcard $(UPSTREAM)/inc/*.h) inc/transport_log.h
 	@mkdir -p $(@D)
