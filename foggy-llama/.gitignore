@@ -1,0 +1,9 @@
+/build/
+/dist/
+/models/*.gguf
+/models/*.download
+/submit.zip
+__pycache__/
+*.pyc
+*.dSYM/
+.DS_Store
