@@ -12,14 +12,19 @@ Chat parse_chat(const foggy_http_request_t &request, const Json &model_info);
 int chat_response(foggy_http_response_t *response, std::shared_ptr<Generation> generation,
                   const std::string &model);
 struct ServiceContext {
+    typedef std::function<ChatRateLimiter::Clock::time_point()> ClockFunction;
+
+    explicit ServiceContext(Engine &model_engine, ClockFunction clock = ChatRateLimiter::Clock::now)
+        : engine(model_engine), now(clock) {}
+
     Engine &engine;
-    ChatRateLimiter limiter{};
-    std::function<ChatRateLimiter::Clock::time_point()> now = ChatRateLimiter::Clock::now;
+    ChatRateLimiter limiter;
+    ClockFunction now;
 };
-// The service context and engine are borrowed and must outlive the server.
-int register_llama_routes(foggy_http_server_t *server, ServiceContext &service);
-int dispatch_request(const foggy_http_server_t *server, const foggy_http_request_t *request,
-                     foggy_http_response_t *response) noexcept;
+// The service context is borrowed and must outlive the server.
+int health(const foggy_http_request_t *request, foggy_http_response_t *response, void *context) noexcept;
+int models(const foggy_http_request_t *request, foggy_http_response_t *response, void *context) noexcept;
+int chat(const foggy_http_request_t *request, foggy_http_response_t *response, void *context) noexcept;
 
 // Decoder for this service's SSE subset; read/chunk boundaries are arbitrary.
 class Events {

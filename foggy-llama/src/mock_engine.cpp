@@ -45,6 +45,6 @@ public:
 }
 std::unique_ptr<Engine> make_mock_engine(const std::string &alias, int delay_ms) {
     if (alias.empty() || delay_ms < 0) throw std::invalid_argument("invalid mock configuration");
-    return std::make_unique<MockEngine>(alias, delay_ms);
+    return std::unique_ptr<Engine>(new MockEngine(alias, delay_ms));
 }
 }

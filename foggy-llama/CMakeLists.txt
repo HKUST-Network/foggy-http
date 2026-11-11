@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.16)
 project(foggy_llama_cp4 LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads REQUIRED)
 
@@ -14,6 +16,8 @@ if(NOT FOGGY_HTTP_READ_MS MATCHES "^[1-9][0-9]*$")
 endif()
 
 set(CP3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../foggy-http")
+set(CP4_TEST_DIR "" CACHE PATH "Instructor test sources")
+set(FOGGY_HTTP_SOURCE "${CP3_DIR}/src/foggy_http.cc" CACHE FILEPATH "Completed CP3 HTTP implementation")
 set(FOGGY_TCP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/foggytcp/foggytcp")
 if(NOT EXISTS "${FOGGY_TCP_DIR}/inc/foggy_tcp.h")
     message(FATAL_ERROR "Initialize thirdparty/foggytcp from the repository root with git submodule update --init")
@@ -29,13 +33,14 @@ target_include_directories(foggy_transport PUBLIC "${CP3_DIR}/inc" PRIVATE "${FO
 target_compile_options(foggy_transport PRIVATE -include "${CP3_DIR}/inc/transport_log.h")
 target_link_libraries(foggy_transport PUBLIC Threads::Threads)
 
-add_library(foggy_http STATIC src/foggy_http.c)
-target_include_directories(foggy_http PUBLIC src)
-target_compile_definitions(foggy_http PRIVATE _POSIX_C_SOURCE=200809L HTTP_READ_MS=${FOGGY_HTTP_READ_MS})
+set_source_files_properties("${FOGGY_HTTP_SOURCE}" PROPERTIES LANGUAGE C COMPILE_FLAGS "-x c")
+add_library(foggy_http STATIC "${FOGGY_HTTP_SOURCE}")
+target_include_directories(foggy_http PUBLIC "${CP3_DIR}/inc")
+target_compile_definitions(foggy_http PRIVATE _POSIX_C_SOURCE=200809L FOGGY_CP4=1 FOGGY_HTTP_READ_MS=${FOGGY_HTTP_READ_MS})
 target_compile_options(foggy_http PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(foggy_http PUBLIC foggy_transport)
 add_library(foggy_api STATIC src/api.cpp src/mock_engine.cpp src/client_flow.cpp
-    src/router.cpp src/llama_routes.cpp
+    src/llama_routes.cpp
     src/rate_limiter.cpp)
 target_include_directories(foggy_api PUBLIC src vendor)
 target_compile_options(foggy_api PRIVATE -Wall -Wextra -Wpedantic)
@@ -57,7 +62,7 @@ if(FOGGY_WITH_LLAMA)
     if(NOT llama_git_status EQUAL 0 OR NOT llama_head STREQUAL llama_revision)
         message(FATAL_ERROR "LLAMA_SOURCE_DIR must be a Git checkout at ${llama_revision}")
     endif()
-    # Only link inference libraries; keep HTTP and transport in CP3.
+    # Link the inference library. CP3 provides HTTP and transport.
     foreach(flag LLAMA_BUILD_COMMON LLAMA_BUILD_TOOLS LLAMA_BUILD_EXAMPLES
                  LLAMA_BUILD_TESTS LLAMA_BUILD_SERVER LLAMA_BUILD_APP LLAMA_BUILD_UI
                  GGML_METAL GGML_CUDA GGML_NATIVE GGML_OPENMP BUILD_SHARED_LIBS)
@@ -67,4 +72,9 @@ if(FOGGY_WITH_LLAMA)
     target_sources(foggy-server PRIVATE src/llama_engine.cpp)
     target_compile_definitions(foggy-server PRIVATE FOGGY_WITH_LLAMA)
     target_link_libraries(foggy-server PRIVATE llama)
+endif()
+
+if(CP4_TEST_DIR)
+    add_executable(test-core "${CP4_TEST_DIR}/test_core.cpp")
+    target_link_libraries(test-core PRIVATE foggy_api)
 endif()

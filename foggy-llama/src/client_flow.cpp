@@ -117,7 +117,7 @@ TurnResult chat_turn(foggy_http_client_t *client, const std::string &model,
     });
     Response response;
     Receiver receiver{&events, &response.value, {}};
-    int status = foggy_http_client_post_json(client, "/v1/chat/completions", wire.data(), wire.size(),
+    int status = foggy_http_client_post(client, "/v1/chat/completions", wire.data(), wire.size(),
                                              receive, &receiver, &response.value);
     int saved = errno;
     if (receiver.error) std::rethrow_exception(receiver.error);

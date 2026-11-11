@@ -19,7 +19,7 @@ struct Stream {
     std::shared_ptr<Generation> generation;
     std::string model, id;
     std::time_t created;
-    bool ended = false;
+    bool ended;
 
     std::string event(const Json &delta, const Json &reason) const {
         return "data: " + Json({{"id", id}, {"object", "chat.completion.chunk"},
@@ -137,7 +137,7 @@ int chat_response(foggy_http_response_t *response, std::shared_ptr<Generation> g
     foggy_http_response_init(&result);
     try {
         static std::atomic<unsigned long long> serial{0};
-        auto stream = std::make_unique<Stream>(Stream{std::move(generation), model,
+        std::unique_ptr<Stream> stream(new Stream{std::move(generation), model,
             "chatcmpl-foggy-" + std::to_string(++serial), std::time(nullptr), false});
         if (foggy_http_header_set(&result.headers, "Content-Type", "text/event-stream") < 0 ||
             foggy_http_header_set(&result.headers, "Cache-Control", "no-cache") < 0) {

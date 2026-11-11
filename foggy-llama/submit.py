@@ -1,23 +1,34 @@
 #!/usr/bin/env python3
-"""Package only the editable CP4 files and their checksums."""
-from pathlib import Path
+"""Package the three CP4 source files and their checksums."""
 import hashlib
+from pathlib import Path
 import zipfile
 
 ROOT = Path(__file__).resolve().parent
-FILES = ("router.cpp", "llama_routes.cpp", "rate_limiter.cpp")
+FILES = {
+    "foggy_http.cc": ROOT.parent / "foggy-http/src/foggy_http.cc",
+    "llama_routes.cpp": ROOT / "src/llama_routes.cpp",
+    "rate_limiter.cpp": ROOT / "src/rate_limiter.cpp",
+}
 
 
-def write_submission(source, output):
-    payloads = {name: (source / name).read_bytes() for name in FILES}
-    sums = "".join(f"{hashlib.sha256(data).hexdigest()}  {name}\n" for name, data in payloads.items())
+def main():
+    try:
+        sources = {name: path.read_bytes() for name, path in FILES.items()}
+    except OSError as error:
+        raise SystemExit(str(error)) from error
+
+    checksums = "".join(
+        f"{hashlib.sha256(data).hexdigest()}  {name}\n"
+        for name, data in sources.items()
+    )
+    output = ROOT / "submit.zip"
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name, data in payloads.items():
+        for name, data in sources.items():
             archive.writestr(name, data)
-        archive.writestr("SHA256SUMS", sums)
+        archive.writestr("SHA256SUMS", checksums)
+    print(output)
 
 
 if __name__ == "__main__":
-    output = ROOT / "submit.zip"
-    write_submission(ROOT / "src", output)
-    print(output)
+    main()

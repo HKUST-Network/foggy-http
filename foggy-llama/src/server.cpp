@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     try {
         std::string file, alias = "course-model";
         int port = 8083, delay = 100, sessions = 0;
-        [[maybe_unused]] int context = 2048, threads = 2, gpu = 0;
+        int context = 2048, threads = 2, gpu = 0;
         bool mock = false;
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
@@ -60,18 +60,22 @@ int main(int argc, char **argv) {
 #ifdef FOGGY_WITH_LLAMA
             engine = foggy_llama::make_llama_engine(file, alias, context, threads, gpu);
 #else
+            (void)context;
+            (void)threads;
+            (void)gpu;
             throw std::invalid_argument("built without llama.cpp; use --mock or rebuild with FOGGY_WITH_LLAMA=ON");
 #endif
         }
         foggy_llama::ServiceContext service{*engine};
         Server server;
-        if (foggy_llama::register_llama_routes(&server.value, service) < 0)
+        if (foggy_http_server_get(&server.value, "/health", foggy_llama::health, &service) < 0 ||
+            foggy_http_server_get(&server.value, "/v1/models", foggy_llama::models, &service) < 0 ||
+            foggy_http_server_post(&server.value, "/v1/chat/completions", foggy_llama::chat, &service) < 0)
             throw std::runtime_error(std::string("route registration failed: ") + std::strerror(errno));
         std::cout << "MODEL " << engine->model_info().dump() << std::endl;
         // The sequential course listener opens its socket after this marker.
         std::cout << "READY port=" << port << " mock=" << mock << std::endl;
-        if (foggy_http_server_listen_with_dispatch(&server.value, port, sessions,
-                                                   foggy_llama::dispatch_request) < 0)
+        if (foggy_http_server_listen(&server.value, port, sessions) < 0)
             throw std::runtime_error(std::string("server failed: ") + std::strerror(errno));
     } catch (const std::exception &error) {
         std::cerr << "ERROR " << error.what() << std::endl;

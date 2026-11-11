@@ -52,7 +52,7 @@ public:
         if (!tmpl) throw std::invalid_argument("model has no chat template");
         int size = llama_chat_apply_template(tmpl, messages.data(), messages.size(), true, nullptr, 0);
         if (size < 0 || size > 256*1024) throw std::invalid_argument("unsupported or oversized chat template");
-        std::string prompt(size, '\0');
+        std::vector<char> prompt(size);
         int written = llama_chat_apply_template(tmpl, messages.data(), messages.size(), true, prompt.data(), prompt.size());
         if (written != size) throw std::runtime_error("chat template changed size");
         int count = llama_tokenize(vocab_, prompt.data(), prompt.size(), nullptr, 0, true, true);
@@ -126,6 +126,6 @@ public:
 }
 std::unique_ptr<Engine> make_llama_engine(const std::string &file, const std::string &alias,
                                        int context, int threads, int gpu_layers) {
-    return std::make_unique<LlamaEngine>(file, alias, context, threads, gpu_layers);
+    return std::unique_ptr<Engine>(new LlamaEngine(file, alias, context, threads, gpu_layers));
 }
 }

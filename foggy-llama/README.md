@@ -1,56 +1,59 @@
 # CP4 · Foggy Llama
 
-完成 [任务说明](ASSIGNMENT.md) 中的三个文件。
+Continue from your completed CP3 project. If you received a CP4 starter ZIP,
+extract it at the CP3 repository root so that `foggy-http/`, `foggy-llama/`,
+and `thirdparty/` are siblings. The Fall 2026 course website provides the
+CP4 handout.
 
-| 文件 | 任务 |
-| --- | --- |
-| `src/router.cpp` | 分发 HTTP 请求，返回 404 或 405 |
-| `src/llama_routes.cpp` | 实现健康检查、模型列表和流式聊天 |
-| `src/rate_limiter.cpp` | 实现聊天限流 |
+## Build and try the mock service
 
-`src/` 也包含课程提供的应用入口、HTTP 分发接口和推理适配器。传输层复用仓库中的 CP3 FoggyTCP 和 transport adapter。
-
-## 构建和运行
-
-需要 C11 和 C++17 编译器、CMake 3.16+ 和 Python 3。Ubuntu 可用 `sudo apt install build-essential cmake python3 git curl` 安装依赖。
-
-在原 CP3 仓库根目录执行下面的命令。
+You need a C11 and C++11 compiler, CMake 3.16 or newer, and Python 3.
+On Ubuntu, install `build-essential`, `cmake`, `python3`, and `git`.
+From the CP3 repository root:
 
 ```sh
-git pull --no-rebase https://github.com/HKUST-Network/foggy-http.git main
 git submodule update --init -- thirdparty/foggytcp
-cd foggy-llama
-cmake -S . -B build
-cmake --build build -j2
+cmake -S foggy-llama -B foggy-llama/build
+cmake --build foggy-llama/build -j2
 ```
 
-补全学生文件后，在两个终端分别启动服务端和客户端。
+After completing the tasks, start the service in one terminal:
 
 ```sh
-./build/foggy-server --mock
+./foggy-llama/build/foggy-server --mock
 ```
 
+In another terminal:
+
 ```sh
-./build/foggy-client health
-./build/foggy-client chat --prompt '你好'
+./foggy-llama/build/foggy-client health
+./foggy-llama/build/foggy-client models
+./foggy-llama/build/foggy-client chat --prompt 'Say hello.'
 ```
 
-客户端默认连接本机 UDP 8083。连接另一台机器时，使用 `--host` 指定服务端地址。
+The default is UDP port 8083 on localhost. Use `--host` and `--port` to
+connect to another server. Try interactive `chat` without `--prompt` to
+exercise connection reuse and the shared rate limit.
 
-## 可选 · 真实模型
+## Optional real model
 
-从 `foggy-llama/` 运行以下命令。仓库根目录的 `thirdparty/llama.cpp` 固定在 `1ab7e5ad2`，模型下载脚本校验 GGUF 的 SHA-256。
+The real engine needs a separate checkout of llama.cpp at the revision in
+`vendor/llama-revision.txt`. It builds with the upstream compiler requirements,
+including C++17. With the checkout available, run from `foggy-llama/`:
 
 ```sh
-git -C .. submodule update --init --depth 1 -- thirdparty/llama.cpp
 python3 vendor/fetch_model.py
-cmake -S . -B build/real -DFOGGY_WITH_LLAMA=ON
+cmake -S . -B build/real -DFOGGY_WITH_LLAMA=ON -DLLAMA_SOURCE_DIR=/path/to/llama.cpp
 cmake --build build/real -j2
 ./build/real/foggy-server --model models/SmolLM2-135M-Instruct-Q4_K_M.gguf --port 8084
 ```
 
-用 `./build/real/foggy-client --port 8084 chat --prompt '你好'` 连接真实模型。
+Connect with `./build/real/foggy-client --port 8084 chat --prompt 'Say hello.'`.
+If model output takes longer than the CP3 read deadline, your HTTP source
+can use the CP4-only `FOGGY_HTTP_READ_MS` definition for response reads.
+Keep the three-second server idle timeout separate.
 
-## 提交
+## Submit
 
-在 `foggy-llama/` 运行 `python3 submit.py`，将生成的 `submit.zip` 上传至 Gradescope。只提交代码，无需报告。
+From the CP3 project root, run `python3 foggy-llama/submit.py`.
+Upload the resulting `foggy-llama/submit.zip`.
