@@ -1,0 +1,8 @@
+{
+  "tag": "b11177",
+  "sha256": {
+    "macos-arm64": "815f8f3ddc8f57ceb792fed561bd6a6c6bd590578f3ad38604e7f70c49de1ac1",
+    "macos-x64": "47469443f622dbcf13a4cdb484c0e82e8194ca4da5a73e82952b26b9337c6a0c",
+    "ubuntu-x64": "9e088583293c4c104953ead0dd8957f4e00dca318c7f241c039198e5eb2e2e54"
+  }
+}

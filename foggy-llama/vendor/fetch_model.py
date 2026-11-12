@@ -2,19 +2,34 @@
 """Download the course GGUF pinned by revision, size and SHA-256."""
 from pathlib import Path
 import hashlib
+from http.client import HTTPException
 import json
-import subprocess
+import shutil
+from tempfile import TemporaryDirectory
+from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def validate(path, metadata):
+def validate(path, checksum, size=None):
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
-    if path.stat().st_size != metadata["bytes"] or digest.hexdigest() != metadata["sha256"]:
-        raise ValueError(f"Model size or SHA-256 mismatch: {path}")
+    if (size is not None and path.stat().st_size != size) or digest.hexdigest() != checksum:
+        raise ValueError(f"Size or SHA-256 mismatch: {path.name}")
+
+
+def download(url, target, checksum, size=None):
+    for attempt in range(3):
+        try:
+            with urlopen(url, timeout=30) as response, target.open("wb") as output:
+                shutil.copyfileobj(response, output, 1024 * 1024)
+            validate(target, checksum, size)
+            return
+        except (OSError, HTTPException, ValueError) as error:
+            if attempt == 2:
+                raise OSError(f"Download failed for {target.name}: {error}") from error
 
 
 def main():
@@ -22,18 +37,18 @@ def main():
     target = ROOT / "models" / metadata["filename"]
     target.parent.mkdir(exist_ok=True)
     if target.exists():
-        validate(target, metadata)
+        validate(target, metadata["sha256"], metadata["bytes"])
     else:
-        partial = target.with_suffix(".download")
-        try:
-            subprocess.run(["curl", "-fL", "--retry", "2", metadata["url"], "-o", str(partial)], check=True)
-            validate(partial, metadata)
+        with TemporaryDirectory(prefix=".model-", suffix=".download", dir=target.parent) as directory:
+            partial = Path(directory) / target.name
+            print(f"Downloading course model {target.name}", flush=True)
+            download(metadata["url"], partial, metadata["sha256"], metadata["bytes"])
             partial.replace(target)
-        except Exception:
-            partial.unlink(missing_ok=True)
-            raise
     print(target)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, ValueError) as error:
+        raise SystemExit(str(error)) from None

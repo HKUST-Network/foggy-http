@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
             (void)context;
             (void)threads;
             (void)gpu;
-            throw std::invalid_argument("use --mock or build with make cp4 FOGGY_WITH_LLAMA=1");
+            throw std::invalid_argument("use --mock or build with make cp4");
 #endif
         }
         foggy_llama_service_t service{&engine};

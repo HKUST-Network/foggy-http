@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "llama.h"
 #include <algorithm>
+#include <cstdlib>
 #include <stdexcept>
 
 namespace foggy_llama {
@@ -129,6 +130,10 @@ Generation llama_start_chat(void *context, const Chat &chat) {
 Engine make_llama_engine(const std::string &file, const std::string &alias,
                          int context, int threads, int gpu_layers) {
     if (context < 256 || context > 32768 || threads < 1) throw std::invalid_argument("invalid engine limits");
+#if defined(__APPLE__)
+    // The release includes Metal. Skip device initialization for CPU-only runs.
+    if (gpu_layers == 0) setenv("GGML_METAL_DEVICES", "0", 0);
+#endif
     ggml_backend_load_all();
     auto params = llama_model_default_params();
     params.n_gpu_layers = gpu_layers;
