@@ -1,7 +1,6 @@
 #pragma once
 #include "engine.h"
 #include "foggy_http.h"
-#include "rate_limiter.h"
 #include <functional>
 
 namespace foggy_llama {
@@ -12,14 +11,7 @@ Chat parse_chat(const foggy_http_request_t &request, const Json &model_info);
 int chat_response(foggy_http_response_t *response, std::shared_ptr<Generation> generation,
                   const std::string &model);
 struct ServiceContext {
-    typedef std::function<ChatRateLimiter::Clock::time_point()> ClockFunction;
-
-    explicit ServiceContext(Engine &model_engine, ClockFunction clock = ChatRateLimiter::Clock::now)
-        : engine(model_engine), now(clock) {}
-
     Engine &engine;
-    ChatRateLimiter limiter;
-    ClockFunction now;
 };
 // The service context is borrowed and must outlive the server.
 int register_routes(foggy_http_server_t *server, ServiceContext &service) noexcept;

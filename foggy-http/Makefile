@@ -13,7 +13,7 @@ CP4_BUILD = $(BUILD)/foggy-llama
 CP4_CPPFLAGS = $(CPPFLAGS) -I$(CP4)/inc -I$(CP4)/vendor
 CP4_CXXFLAGS = $(filter-out -std=%,$(CXXFLAGS)) -std=c++11 -Wpedantic
 CP4_HEADERS = $(wildcard $(CP4)/inc/*.h) $(CP4)/vendor/json.hpp inc/foggy_http.h inc/transport.h
-CP4_COMMON = $(addprefix $(CP4_BUILD)/,api.o mock_engine.o client_flow.o llama_routes.o rate_limiter.o http.o) $(TRANSPORT)
+CP4_COMMON = $(addprefix $(CP4_BUILD)/,api.o mock_engine.o client_flow.o llama_routes.o http.o) $(TRANSPORT)
 CP4_MOCK_PROGRAMS = $(BUILD)/foggy-server $(BUILD)/foggy-client
 CP4_TEST_DIR ?= ../cp4/integration/tests
 FOGGY_HTTP_READ_MS ?= 120000

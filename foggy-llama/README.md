@@ -7,8 +7,8 @@ CP4 handout.
 
 Complete route registration in `foggy-llama/src/llama_routes.cc` and extend
 your CP3 dispatch in `foggy-http/src/foggy_http.cc` for JSON routing errors and
-`OPTIONS` queries. The model handlers, inference engines, streaming helpers,
-and chat rate limiter are supplied.
+`OPTIONS` queries. The model handlers, inference engines, and streaming
+helpers are supplied.
 
 ## Build and try the mock service
 
@@ -37,7 +37,7 @@ In another terminal:
 
 The default is UDP port 8083 on localhost. Use `--host` and `--port` to
 connect to another server. Try interactive `chat` without `--prompt` to
-exercise connection reuse and the shared rate limit.
+send several prompts on the same connection.
 
 ## Run the local checks
 

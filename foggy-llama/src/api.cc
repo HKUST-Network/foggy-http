@@ -190,9 +190,6 @@ int chat(const foggy_http_request_t *request, foggy_http_response_t *response, v
     try {
         auto &service = *static_cast<ServiceContext *>(context);
         const auto input = parse_chat(*request, service.engine.model_info());
-        if (service.limiter.admit(service.now()) > 0)
-            return handler_error(response, "rate limit exceeded", 429);
-
         auto generation = service.engine.start_chat(input);
         if (!generation) return handler_error(response, "inference did not start", 500);
         return chat_response(response, std::move(generation), input.model);
