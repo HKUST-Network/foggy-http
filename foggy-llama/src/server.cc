@@ -2,6 +2,7 @@
 #include <cerrno>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 
 namespace {
@@ -13,14 +14,6 @@ int number(const std::string &text, int low, int high, const std::string &name) 
     return value;
 }
 
-class Server {
-public:
-    foggy_http_server_t value{};
-    Server() { foggy_http_server_init(&value); }
-    ~Server() { foggy_http_server_free(&value); }
-    Server(const Server &) = delete;
-    Server &operator=(const Server &) = delete;
-};
 }
 
 int main(int argc, char **argv) {
@@ -53,7 +46,7 @@ int main(int argc, char **argv) {
         }
         if (alias.empty()) throw std::invalid_argument("model alias cannot be empty");
         if (mock && !file.empty()) throw std::invalid_argument("choose --mock or --model");
-        std::unique_ptr<foggy_llama::Engine> engine;
+        foggy_llama::Engine engine{};
         if (mock) engine = foggy_llama::make_mock_engine(alias, delay);
         else {
             if (file.empty()) throw std::invalid_argument("use --model local.gguf or --mock");
@@ -63,17 +56,20 @@ int main(int argc, char **argv) {
             (void)context;
             (void)threads;
             (void)gpu;
-            throw std::invalid_argument("use --mock or build with make foggy-llama FOGGY_WITH_LLAMA=1");
+            throw std::invalid_argument("use --mock or build with make cp4 FOGGY_WITH_LLAMA=1");
 #endif
         }
-        foggy_llama::ServiceContext service{*engine};
-        Server server;
-        if (foggy_llama::register_routes(&server.value, service) < 0)
+        foggy_llama_service_t service{&engine};
+        foggy_http_server_t server;
+        foggy_http_server_init(&server);
+        const std::unique_ptr<foggy_http_server_t, decltype(&foggy_http_server_free)>
+            cleanup(&server, foggy_http_server_free);
+        if (foggy_llama_register_routes(&server, &service) < 0)
             throw std::runtime_error(std::string("route registration failed: ") + std::strerror(errno));
-        std::cout << "MODEL " << engine->model_info().dump() << std::endl;
+        std::cout << "MODEL " << foggy_llama::engine_model_info(&engine).dump() << std::endl;
         // The sequential course listener opens its socket after this marker.
         std::cout << "READY port=" << port << " mock=" << mock << std::endl;
-        if (foggy_http_server_listen(&server.value, port, sessions) < 0)
+        if (foggy_http_server_listen(&server, port, sessions) < 0)
             throw std::runtime_error(std::string("server failed: ") + std::strerror(errno));
     } catch (const std::exception &error) {
         std::cerr << "ERROR " << error.what() << std::endl;

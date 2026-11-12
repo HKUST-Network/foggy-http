@@ -2,6 +2,7 @@
 #include <cerrno>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 
 namespace {
@@ -13,17 +14,6 @@ int number(const std::string &text, int low, int high, const std::string &name) 
     return value;
 }
 
-class Client {
-public:
-    foggy_http_client_t value{};
-    Client(const std::string &host, int port) {
-        if (foggy_http_client_init(&value, host.c_str(), port, 1) < 0)
-            throw std::runtime_error(std::string("client init failed: ") + std::strerror(errno));
-    }
-    ~Client() { foggy_http_client_free(&value); }
-    Client(const Client &) = delete;
-    Client &operator=(const Client &) = delete;
-};
 }
 
 int main(int argc, char **argv) {
@@ -50,12 +40,16 @@ int main(int argc, char **argv) {
             else throw std::invalid_argument("unknown option " + arg);
         }
         if (host.empty()) throw std::invalid_argument("host cannot be empty");
-        Client client(host, port);
+        foggy_http_client_t client{};
+        if (foggy_http_client_init(&client, host.c_str(), port, 1) < 0)
+            throw std::runtime_error(std::string("client init failed: ") + std::strerror(errno));
+        const std::unique_ptr<foggy_http_client_t, decltype(&foggy_http_client_free)>
+            cleanup(&client, foggy_http_client_free);
         if (command == "health") {
-            std::cout << foggy_llama::health_status(&client.value).dump(2) << std::endl;
+            std::cout << foggy_llama::health_status(&client).dump(2) << std::endl;
             return 0;
         }
-        const auto models = foggy_llama::discover_models(&client.value);
+        const auto models = foggy_llama::discover_models(&client);
         if (command == "models") { std::cout << models.dump(2) << std::endl; return 0; }
         alias = foggy_llama::discover_model(models, alias);
         std::cerr << "MODEL " << alias << std::endl;
@@ -66,7 +60,7 @@ int main(int argc, char **argv) {
                 if (!std::getline(std::cin, prompt) || prompt == "/quit") break;
                 if (prompt.empty()) continue;
             }
-            auto turn = foggy_llama::chat_turn(&client.value, alias, history, prompt, max_tokens,
+            auto turn = foggy_llama::chat_turn(&client, alias, history, prompt, max_tokens,
                 [](const std::string &text) { std::cout << text << std::flush; });
             std::cout << std::endl;
             std::cerr << "DONE messages=" << turn.messages << " first_ms=" << turn.first_ms

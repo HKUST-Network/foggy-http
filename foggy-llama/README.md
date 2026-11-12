@@ -1,14 +1,14 @@
 # CP4 · Foggy Llama
 
-Continue from your completed CP3 project. If you received a CP4 starter ZIP,
-extract it at the CP3 repository root so that `foggy-http/`, `foggy-llama/`,
-and `thirdparty/` are siblings. The Fall 2026 course website provides the
-CP4 handout.
+Continue from your completed CP3 project. Save your CP3 work before pulling
+the CP4 update. See the [CP4 handout](https://foggynetwork.com/checkpoints/cp4)
+for the assignment requirements.
 
 Complete route registration in `foggy-llama/src/llama_routes.cc` and extend
 your CP3 dispatch in `foggy-http/src/foggy_http.cc` for JSON routing errors and
 `OPTIONS` queries. The model handlers, inference engines, and streaming
-helpers are supplied.
+helpers are supplied. Both files you edit compile as C11 with the `.cc`
+extension. The route registration uses the C interface in `inc/foggy_llama.h`.
 
 ## Build and try the mock service
 
@@ -17,8 +17,8 @@ On Ubuntu, install `build-essential`, `python3`, and `git`.
 From the CP3 repository root:
 
 ```sh
-git submodule update --init -- thirdparty/foggytcp
-make -j2 foggy-llama
+git submodule update --init -- thirdparty/foggytcp thirdparty/llama.cpp
+make cp4
 ```
 
 After completing the tasks, start the service in one terminal:
@@ -47,15 +47,21 @@ routes, JSON 404 and 405 responses, and `OPTIONS` with `Allow`.
 
 ## Optional real model
 
-Install the llama.cpp headers and libraries built from the commit in
-`vendor/llama-revision.txt`. Make reads their compiler and linker flags from
-`pkg-config llama`. For a custom installation, set `PKG_CONFIG_PATH` and make
-its shared libraries visible to the system loader. Run from the repository root:
+On Ubuntu, install `cmake`, `pkg-config`, and `curl`. Build the llama.cpp
+submodule and make its libraries available to the CP4 build and server. Run
+from the repository root:
 
 ```sh
-python3 foggy-llama/vendor/fetch_model.py
-make -j2 foggy-llama FOGGY_WITH_LLAMA=1
-./build/llama/foggy-server --model foggy-llama/models/SmolLM2-135M-Instruct-Q4_K_M.gguf --port 8084
+cmake -S thirdparty/llama.cpp -B build/llama-cmake \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/build/llama-install" \
+    -DCMAKE_INSTALL_LIBDIR=lib -DBUILD_SHARED_LIBS=ON \
+    -DLLAMA_BUILD_COMMON=OFF -DLLAMA_BUILD_APP=OFF
+cmake --build build/llama-cmake -j2
+cmake --install build/llama-cmake
+PKG_CONFIG_PATH="$PWD/build/llama-install/lib/pkgconfig" make cp4 FOGGY_WITH_LLAMA=1
+model=$(python3 foggy-llama/vendor/fetch_model.py)
+LD_LIBRARY_PATH="$PWD/build/llama-install/lib" \
+    ./build/llama/foggy-server --model "$model" --port 8084
 ```
 
 Connect with `./build/foggy-client --port 8084 chat --prompt 'Say hello.'`.

@@ -4,21 +4,13 @@
 #include <cstring>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 
 namespace foggy_llama {
 namespace {
 using Clock = std::chrono::steady_clock;
-
-class Response {
-public:
-    foggy_http_response_t value;
-    Response() { foggy_http_response_init(&value); }
-    ~Response() { foggy_http_response_free(&value); }
-    Response(const Response &) = delete;
-    Response &operator=(const Response &) = delete;
-};
 
 std::string body(const foggy_http_response_t &response) {
     return response.body.size ? std::string(response.body.data, response.body.size) : std::string();
@@ -57,19 +49,22 @@ void receive(const void *data, size_t size, void *context) noexcept {
     if (state.error || state.response->status != 200) return;
     try {
         if (!is_event_stream(*state.response)) throw std::runtime_error("expected text/event-stream");
-        state.events->feed(std::string(static_cast<const char *>(data), size));
+        events_feed(state.events, std::string(static_cast<const char *>(data), size));
     } catch (...) {
         state.error = std::current_exception();
     }
 }
 Json get_json(foggy_http_client_t *client, const char *path, const char *failure) {
     if (!client) throw std::invalid_argument("missing HTTP client");
-    Response response;
-    if (foggy_http_client_get(client, path, &response.value) < 0)
+    foggy_http_response_t response;
+    foggy_http_response_init(&response);
+    const std::unique_ptr<foggy_http_response_t, decltype(&foggy_http_response_free)>
+        cleanup(&response, foggy_http_response_free);
+    if (foggy_http_client_get(client, path, &response) < 0)
         throw std::runtime_error(std::string(failure) + ": " + std::strerror(errno));
-    report(client, response.value);
-    require_success(response.value);
-    return Json::parse(body(response.value));
+    report(client, response);
+    require_success(response);
+    return Json::parse(body(response));
 }
 }
 
@@ -108,24 +103,28 @@ TurnResult chat_turn(foggy_http_client_t *client, const std::string &model,
                             {"max_tokens", max_tokens}, {"stream", true}}).dump();
     TurnResult result;
     const auto start = Clock::now();
-    Events events([&](const std::string &text) {
+    Events events;
+    events_init(&events, [&](const std::string &text) {
         if (text.empty()) return;
         if (result.first_ms < 0) result.first_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             Clock::now() - start).count();
         result.text += text;
         if (output) output(text);
     });
-    Response response;
-    Receiver receiver{&events, &response.value, {}};
+    foggy_http_response_t response;
+    foggy_http_response_init(&response);
+    const std::unique_ptr<foggy_http_response_t, decltype(&foggy_http_response_free)>
+        cleanup(&response, foggy_http_response_free);
+    Receiver receiver{&events, &response, {}};
     int status = foggy_http_client_post(client, "/v1/chat/completions", wire.data(), wire.size(),
-                                             receive, &receiver, &response.value);
+                                             receive, &receiver, &response);
     int saved = errno;
     if (receiver.error) std::rethrow_exception(receiver.error);
     if (status < 0) throw std::runtime_error(std::string("chat request failed: ") + std::strerror(saved));
-    report(client, response.value);
-    require_success(response.value);
-    if (!is_event_stream(response.value)) throw std::runtime_error("expected text/event-stream");
-    events.finish();
+    report(client, response);
+    require_success(response);
+    if (!is_event_stream(response)) throw std::runtime_error("expected text/event-stream");
+    events_finish(&events);
     messages.push_back({{"role", "assistant"}, {"content", result.text}});
     history = std::move(messages);
     result.messages = history.size();

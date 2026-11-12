@@ -6,7 +6,6 @@
 #include <stdexcept>
 #include <utility>
 
-namespace foggy_llama {
 namespace {
 int exception_errno() noexcept {
     try { throw; }
@@ -16,22 +15,25 @@ int exception_errno() noexcept {
 }
 
 int handler_error(foggy_http_response_t *response, const char *message, int status) noexcept {
-    try { return error_response(response, message, status); }
+    try { return foggy_llama::error_response(response, message, status); }
     catch (...) { return exception_errno(); }
 }
+}
 
+namespace foggy_llama {
+namespace {
 struct Stream {
-    std::shared_ptr<Generation> generation;
+    Generation generation;
     std::string model, id;
     std::time_t created;
     bool ended;
-
-    std::string event(const Json &delta, const Json &reason) const {
-        return "data: " + Json({{"id", id}, {"object", "chat.completion.chunk"},
-            {"created", created}, {"model", model}, {"choices", Json::array({
-                {{"index", 0}, {"delta", delta}, {"finish_reason", reason}}})}}).dump() + "\n\n";
-    }
 };
+
+std::string stream_event(const Stream *stream, const Json &delta, const Json &reason) {
+    return "data: " + Json({{"id", stream->id}, {"object", "chat.completion.chunk"},
+        {"created", stream->created}, {"model", stream->model}, {"choices", Json::array({
+            {{"index", 0}, {"delta", delta}, {"finish_reason", reason}}})}}).dump() + "\n\n";
+}
 
 void free_stream(void *context) noexcept { delete static_cast<Stream *>(context); }
 
@@ -48,10 +50,12 @@ int next_stream(void *context, foggy_http_buffer_t *output) noexcept {
     if (stream->ended) return 0;
     try {
         std::string text, wire;
-        bool more = stream->generation->next(text);
-        if (!text.empty()) wire += stream->event({{"content", text}}, nullptr);
+        const char *finish_reason = nullptr;
+        auto &generation = stream->generation;
+        bool more = generation.next(generation.context.get(), text, &finish_reason);
+        if (!text.empty()) wire += stream_event(stream, {{"content", text}}, nullptr);
         if (!more) {
-            wire += stream->event(Json::object(), stream->generation->finish_reason());
+            wire += stream_event(stream, Json::object(), finish_reason);
             wire += "data: [DONE]\n\n";
             stream->ended = true;
         }
@@ -135,9 +139,9 @@ Chat parse_chat(const foggy_http_request_t &request, const Json &info) {
     }
 }
 
-int chat_response(foggy_http_response_t *response, std::shared_ptr<Generation> generation,
+int chat_response(foggy_http_response_t *response, Generation generation,
                   const std::string &model) {
-    if (!response || !generation) { errno = EINVAL; return -1; }
+    if (!response || !generation.context || !generation.next) { errno = EINVAL; return -1; }
     foggy_http_response_t result;
     foggy_http_response_init(&result);
     try {
@@ -163,11 +167,47 @@ int chat_response(foggy_http_response_t *response, std::shared_ptr<Generation> g
     }
 }
 
-int health(const foggy_http_request_t *, foggy_http_response_t *response, void *context) noexcept {
+void events_init(Events *events, std::function<void(const std::string &)> output) {
+    *events = Events{std::move(output), {}, false, false};
+}
+
+void events_feed(Events *events, const std::string &data) {
+    events->buffer += data;
+    if (events->buffer.size() > 1024 * 1024) throw std::runtime_error("SSE event too large");
+    for (;;) {
+        const auto end = events->buffer.find("\n\n");
+        if (end == std::string::npos) return;
+        const auto event = events->buffer.substr(0, end);
+        events->buffer.erase(0, end + 2);
+        if (event.empty() || event[0] == ':') continue;
+        if (events->done || event.rfind("data: ", 0) != 0) throw std::runtime_error("unexpected SSE event");
+        const auto payload = event.substr(6);
+        if (payload == "[DONE]") {
+            if (!events->finished) throw std::runtime_error("DONE without finish_reason");
+            events->done = true;
+            continue;
+        }
+        const auto value = Json::parse(payload);
+        if (value.contains("error")) throw std::runtime_error(value["error"].dump());
+        if (events->finished) throw std::runtime_error("data after finish event");
+        const auto choice = value.at("choices").at(0);
+        const auto delta = choice.at("delta");
+        if (delta.contains("content")) events->output(delta.at("content").get<std::string>());
+        if (!choice.at("finish_reason").is_null()) events->finished = true;
+    }
+}
+
+void events_finish(const Events *events) {
+    if (!events->done || !events->finished || !events->buffer.empty())
+        throw std::runtime_error("incomplete SSE response");
+}
+}
+
+int foggy_llama_health(const foggy_http_request_t *, foggy_http_response_t *response, void *context) {
     try {
-        auto &service = *static_cast<ServiceContext *>(context);
-        const auto id = service.engine.model_info().at("id").get<std::string>();
-        return json_response(response, {{"status", "ok"}, {"model", id}});
+        const auto *service = static_cast<const foggy_llama_service_t *>(context);
+        const auto id = foggy_llama::engine_model_info(service->engine).at("id").get<std::string>();
+        return foggy_llama::json_response(response, {{"status", "ok"}, {"model", id}});
     } catch (const std::exception &error) {
         return handler_error(response, error.what(), 503);
     } catch (...) {
@@ -175,10 +215,11 @@ int health(const foggy_http_request_t *, foggy_http_response_t *response, void *
     }
 }
 
-int models(const foggy_http_request_t *, foggy_http_response_t *response, void *context) noexcept {
+int foggy_llama_models(const foggy_http_request_t *, foggy_http_response_t *response, void *context) {
     try {
-        auto &service = *static_cast<ServiceContext *>(context);
-        return json_response(response, {{"object", "list"}, {"data", Json::array({service.engine.model_info()})}});
+        const auto *service = static_cast<const foggy_llama_service_t *>(context);
+        const auto info = foggy_llama::engine_model_info(service->engine);
+        return foggy_llama::json_response(response, {{"object", "list"}, {"data", foggy_llama::Json::array({info})}});
     } catch (const std::exception &error) {
         return handler_error(response, error.what(), 500);
     } catch (...) {
@@ -186,13 +227,13 @@ int models(const foggy_http_request_t *, foggy_http_response_t *response, void *
     }
 }
 
-int chat(const foggy_http_request_t *request, foggy_http_response_t *response, void *context) noexcept {
+int foggy_llama_chat(const foggy_http_request_t *request, foggy_http_response_t *response, void *context) {
     try {
-        auto &service = *static_cast<ServiceContext *>(context);
-        const auto input = parse_chat(*request, service.engine.model_info());
-        auto generation = service.engine.start_chat(input);
-        if (!generation) return handler_error(response, "inference did not start", 500);
-        return chat_response(response, std::move(generation), input.model);
+        const auto *service = static_cast<const foggy_llama_service_t *>(context);
+        const auto input = foggy_llama::parse_chat(*request, foggy_llama::engine_model_info(service->engine));
+        auto generation = foggy_llama::engine_start_chat(service->engine, input);
+        if (!generation.context) return handler_error(response, "inference did not start", 500);
+        return foggy_llama::chat_response(response, std::move(generation), input.model);
     } catch (const std::invalid_argument &error) {
         return handler_error(response, error.what(), 400);
     } catch (const std::exception &error) {
@@ -200,35 +241,4 @@ int chat(const foggy_http_request_t *request, foggy_http_response_t *response, v
     } catch (...) {
         return handler_error(response, "chat failed", 500);
     }
-}
-
-Events::Events(std::function<void(const std::string &)> output) : output_(std::move(output)) {}
-void Events::feed(const std::string &data) {
-    buffer_ += data;
-    if (buffer_.size() > 1024 * 1024) throw std::runtime_error("SSE event too large");
-    for (;;) {
-        const auto end = buffer_.find("\n\n");
-        if (end == std::string::npos) return;
-        const auto event = buffer_.substr(0, end);
-        buffer_.erase(0, end + 2);
-        if (event.empty() || event[0] == ':') continue;
-        if (done_ || event.rfind("data: ", 0) != 0) throw std::runtime_error("unexpected SSE event");
-        const auto payload = event.substr(6);
-        if (payload == "[DONE]") {
-            if (!finished_) throw std::runtime_error("DONE without finish_reason");
-            done_ = true;
-            continue;
-        }
-        const auto value = Json::parse(payload);
-        if (value.contains("error")) throw std::runtime_error(value["error"].dump());
-        if (finished_) throw std::runtime_error("data after finish event");
-        const auto choice = value.at("choices").at(0);
-        const auto delta = choice.at("delta");
-        if (delta.contains("content")) output_(delta.at("content").get<std::string>());
-        if (!choice.at("finish_reason").is_null()) finished_ = true;
-    }
-}
-void Events::finish() const {
-    if (!done_ || !finished_ || !buffer_.empty()) throw std::runtime_error("incomplete SSE response");
-}
 }

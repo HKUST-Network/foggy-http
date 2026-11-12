@@ -60,6 +60,10 @@ foggy-llama-test-build: $(CP4_MOCK_PROGRAMS) $(BUILD)/test-core
 $(CP4_BUILD)/http.o: src/foggy_http.cc inc/foggy_http.h inc/transport.h Makefile
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -DFOGGY_CP4=1 -DFOGGY_HTTP_READ_MS=$(FOGGY_HTTP_READ_MS) -x c -c $< -o $@
+# The student route registration uses the same C11 conventions as the HTTP source.
+$(CP4_BUILD)/llama_routes.o: $(CP4)/src/llama_routes.cc $(CP4)/inc/foggy_llama.h inc/foggy_http.h inc/transport.h Makefile
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) -I$(CP4)/inc $(CFLAGS) -x c -c $< -o $@
 $(CP4_BUILD)/%.o: $(CP4)/src/%.cc $(CP4_HEADERS) Makefile
 	@mkdir -p $(@D)
 	$(CXX) $(CP4_CPPFLAGS) $(CP4_CXXFLAGS) -c $< -o $@
@@ -81,7 +85,7 @@ $(CP4_BUILD)/http-probe.o: $(CP4)/tests/http_probe.cc inc/transport.h Makefile
 	$(CXX) $(CPPFLAGS) $(CP4_CXXFLAGS) -c $< -o $@
 $(BUILD)/foggy-http-probe: $(CP4_BUILD)/http-probe.o $(TRANSPORT)
 	$(CXX) $(CXXFLAGS) $^ -o $@
-$(CP4_BUILD)/test-core.o: $(CP4_TEST_DIR)/test_core.cpp $(CP4_HEADERS) Makefile
+$(CP4_BUILD)/test-core.o: $(CP4_TEST_DIR)/test_core.cc $(CP4_HEADERS) Makefile
 	@mkdir -p $(@D)
 	$(CXX) $(CP4_CPPFLAGS) $(CP4_CXXFLAGS) -c $< -o $@
 $(BUILD)/test-core: $(CP4_BUILD)/test-core.o $(CP4_COMMON)
