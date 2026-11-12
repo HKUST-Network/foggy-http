@@ -57,7 +57,7 @@ def run_checks(build, port):
               isinstance(error, dict) and "error" in error, f"{method} {path} should return a JSON error")
         print(f"PASS {method} {path} -> {status}")
 
-    for path, allow in (("/health?check=1", "GET, OPTIONS"),
+    for path, allow in (("/health", "GET, OPTIONS"),
                         ("/v1/chat/completions", "POST, OPTIONS")):
         status, headers, body = request(build, port, "OPTIONS", path)
         check(status == 200 and not body, f"OPTIONS {path} should return 200 with an empty body")
