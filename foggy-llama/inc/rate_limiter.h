@@ -8,8 +8,8 @@ public:
     static constexpr unsigned capacity = 3;
     static constexpr std::chrono::seconds window{10};
 
-    // Admit and count the request when returning 0. Otherwise return the
-    // remaining time rounded up to seconds. Calls use a monotonic clock.
+    // Return 0 to admit and count the request, or a positive value to reject it.
+    // Calls use a monotonic clock.
     int admit(Clock::time_point now);
 
 private:

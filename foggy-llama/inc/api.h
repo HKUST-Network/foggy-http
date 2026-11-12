@@ -22,6 +22,7 @@ struct ServiceContext {
     ClockFunction now;
 };
 // The service context is borrowed and must outlive the server.
+int register_routes(foggy_http_server_t *server, ServiceContext &service) noexcept;
 int health(const foggy_http_request_t *request, foggy_http_response_t *response, void *context) noexcept;
 int models(const foggy_http_request_t *request, foggy_http_response_t *response, void *context) noexcept;
 int chat(const foggy_http_request_t *request, foggy_http_response_t *response, void *context) noexcept;

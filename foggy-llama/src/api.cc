@@ -15,6 +15,11 @@ int exception_errno() noexcept {
     return -1;
 }
 
+int handler_error(foggy_http_response_t *response, const char *message, int status) noexcept {
+    try { return error_response(response, message, status); }
+    catch (...) { return exception_errno(); }
+}
+
 struct Stream {
     std::shared_ptr<Generation> generation;
     std::string model, id;
@@ -155,6 +160,48 @@ int chat_response(foggy_http_response_t *response, std::shared_ptr<Generation> g
     } catch (...) {
         foggy_http_response_free(&result);
         return exception_errno();
+    }
+}
+
+int health(const foggy_http_request_t *, foggy_http_response_t *response, void *context) noexcept {
+    try {
+        auto &service = *static_cast<ServiceContext *>(context);
+        const auto id = service.engine.model_info().at("id").get<std::string>();
+        return json_response(response, {{"status", "ok"}, {"model", id}});
+    } catch (const std::exception &error) {
+        return handler_error(response, error.what(), 503);
+    } catch (...) {
+        return handler_error(response, "model unavailable", 503);
+    }
+}
+
+int models(const foggy_http_request_t *, foggy_http_response_t *response, void *context) noexcept {
+    try {
+        auto &service = *static_cast<ServiceContext *>(context);
+        return json_response(response, {{"object", "list"}, {"data", Json::array({service.engine.model_info()})}});
+    } catch (const std::exception &error) {
+        return handler_error(response, error.what(), 500);
+    } catch (...) {
+        return handler_error(response, "model lookup failed", 500);
+    }
+}
+
+int chat(const foggy_http_request_t *request, foggy_http_response_t *response, void *context) noexcept {
+    try {
+        auto &service = *static_cast<ServiceContext *>(context);
+        const auto input = parse_chat(*request, service.engine.model_info());
+        if (service.limiter.admit(service.now()) > 0)
+            return handler_error(response, "rate limit exceeded", 429);
+
+        auto generation = service.engine.start_chat(input);
+        if (!generation) return handler_error(response, "inference did not start", 500);
+        return chat_response(response, std::move(generation), input.model);
+    } catch (const std::invalid_argument &error) {
+        return handler_error(response, error.what(), 400);
+    } catch (const std::exception &error) {
+        return handler_error(response, error.what(), 500);
+    } catch (...) {
+        return handler_error(response, "chat failed", 500);
     }
 }
 

@@ -5,50 +5,60 @@ extract it at the CP3 repository root so that `foggy-http/`, `foggy-llama/`,
 and `thirdparty/` are siblings. The Fall 2026 course website provides the
 CP4 handout.
 
+Complete route registration in `foggy-llama/src/llama_routes.cc` and extend
+your CP3 dispatch in `foggy-http/src/foggy_http.cc` for JSON routing errors and
+`OPTIONS` queries. The model handlers, inference engines, streaming helpers,
+and chat rate limiter are supplied.
+
 ## Build and try the mock service
 
-You need a C11 and C++11 compiler, CMake 3.16 or newer, and Python 3.
-On Ubuntu, install `build-essential`, `cmake`, `python3`, and `git`.
+You need GNU Make, C and C++ compilers, and Python 3.
+On Ubuntu, install `build-essential`, `python3`, and `git`.
 From the CP3 repository root:
 
 ```sh
 git submodule update --init -- thirdparty/foggytcp
-cmake -S foggy-llama -B foggy-llama/build
-cmake --build foggy-llama/build -j2
+make -j2 foggy-llama
 ```
 
 After completing the tasks, start the service in one terminal:
 
 ```sh
-./foggy-llama/build/foggy-server --mock
+./build/foggy-server --mock
 ```
 
 In another terminal:
 
 ```sh
-./foggy-llama/build/foggy-client health
-./foggy-llama/build/foggy-client models
-./foggy-llama/build/foggy-client chat --prompt 'Say hello.'
+./build/foggy-client health
+./build/foggy-client models
+./build/foggy-client chat --prompt 'Say hello.'
 ```
 
 The default is UDP port 8083 on localhost. Use `--host` and `--port` to
 connect to another server. Try interactive `chat` without `--prompt` to
 exercise connection reuse and the shared rate limit.
 
+## Run the local checks
+
+After implementing the tasks, run `make foggy-llama-check` from the repository
+root. It starts a mock server on a local UDP port and checks the three model
+routes, JSON 404 and 405 responses, and `OPTIONS` with `Allow`.
+
 ## Optional real model
 
-The real engine needs a separate checkout of llama.cpp at the revision in
-`vendor/llama-revision.txt`. It builds with the upstream compiler requirements,
-including C++17. With the checkout available, run from `foggy-llama/`:
+Install the llama.cpp headers and libraries built from the commit in
+`vendor/llama-revision.txt`. Make reads their compiler and linker flags from
+`pkg-config llama`. For a custom installation, set `PKG_CONFIG_PATH` and make
+its shared libraries visible to the system loader. Run from the repository root:
 
 ```sh
-python3 vendor/fetch_model.py
-cmake -S . -B build/real -DFOGGY_WITH_LLAMA=ON -DLLAMA_SOURCE_DIR=/path/to/llama.cpp
-cmake --build build/real -j2
-./build/real/foggy-server --model models/SmolLM2-135M-Instruct-Q4_K_M.gguf --port 8084
+python3 foggy-llama/vendor/fetch_model.py
+make -j2 foggy-llama FOGGY_WITH_LLAMA=1
+./build/llama/foggy-server --model foggy-llama/models/SmolLM2-135M-Instruct-Q4_K_M.gguf --port 8084
 ```
 
-Connect with `./build/real/foggy-client --port 8084 chat --prompt 'Say hello.'`.
+Connect with `./build/foggy-client --port 8084 chat --prompt 'Say hello.'`.
 If model output takes longer than the CP3 read deadline, your HTTP source
 can use the CP4-only `FOGGY_HTTP_READ_MS` definition for response reads.
 Keep the three-second server idle timeout separate.
@@ -56,4 +66,5 @@ Keep the three-second server idle timeout separate.
 ## Submit
 
 From the CP3 project root, run `python3 foggy-llama/submit.py`.
-Upload the resulting `foggy-llama/submit.zip`.
+Upload the resulting `foggy-llama/submit.zip` with `foggy_http.cc`,
+`llama_routes.cc`, and the generated `SHA256SUMS`.

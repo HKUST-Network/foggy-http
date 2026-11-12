@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the three CP4 source files and their checksums."""
+"""Package the two CP4 source files and their checksums."""
 import hashlib
 from pathlib import Path
 import zipfile
@@ -7,8 +7,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parent
 FILES = {
     "foggy_http.cc": ROOT.parent / "foggy-http/src/foggy_http.cc",
-    "llama_routes.cpp": ROOT / "src/llama_routes.cpp",
-    "rate_limiter.cpp": ROOT / "src/rate_limiter.cpp",
+    "llama_routes.cc": ROOT / "src/llama_routes.cc",
 }
 
 

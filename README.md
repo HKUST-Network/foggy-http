@@ -1,5 +1,9 @@
 # ELEC 3120 Course Project: HTTP over FoggyTCP
 
+CP4 adds a model service and streaming chat client on this CP3 C API and
+FoggyTCP v2. Run `make foggy-llama` from the repository root to build both
+programs. See [foggy-llama/README.md](foggy-llama/README.md) for setup and usage.
+
 In Checkpoint 3, you will implement HTTP over FoggyTCP and configure NGINX to
 forward requests to a date service and an echo service. Use the supplied
 **FoggyTCP v2** submodule rather than your CP2 implementation.

@@ -2,7 +2,3 @@
 	path = thirdparty/foggytcp
 	url = https://github.com/HKUST-Network/foggytcp.git
 	branch = foggy-tcp-v2
-[submodule "thirdparty/llama.cpp"]
-	path = thirdparty/llama.cpp
-	url = https://github.com/ggml-org/llama.cpp.git
-	shallow = true

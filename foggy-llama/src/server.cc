@@ -63,14 +63,12 @@ int main(int argc, char **argv) {
             (void)context;
             (void)threads;
             (void)gpu;
-            throw std::invalid_argument("built without llama.cpp; use --mock or rebuild with FOGGY_WITH_LLAMA=ON");
+            throw std::invalid_argument("use --mock or build with make foggy-llama FOGGY_WITH_LLAMA=1");
 #endif
         }
         foggy_llama::ServiceContext service{*engine};
         Server server;
-        if (foggy_http_server_get(&server.value, "/health", foggy_llama::health, &service) < 0 ||
-            foggy_http_server_get(&server.value, "/v1/models", foggy_llama::models, &service) < 0 ||
-            foggy_http_server_post(&server.value, "/v1/chat/completions", foggy_llama::chat, &service) < 0)
+        if (foggy_llama::register_routes(&server.value, service) < 0)
             throw std::runtime_error(std::string("route registration failed: ") + std::strerror(errno));
         std::cout << "MODEL " << engine->model_info().dump() << std::endl;
         // The sequential course listener opens its socket after this marker.
